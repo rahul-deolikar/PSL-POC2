@@ -1,0 +1,134 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<build-type xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+           xsi:noNamespaceSchemaLocation="https://www.jetbrains.com/teamcity/schemas/2021.1/project-config.xsd">
+  
+  <name>NodeJS Hello World Build</name>
+  <description>Build configuration for Node.js Hello World application</description>
+  <settings>
+    <options>
+      <option name="artifactRules" value="dist/** => dist.zip" />
+      <option name="buildNumberPattern" value="%build.counter%" />
+    </options>
+    
+    <parameters>
+      <param name="env.NODE_ENV" value="production" />
+      <param name="env.ECR_REGISTRY" value="%system.aws.ecr.registry%" />
+      <param name="env.ECR_REPOSITORY" value="nodejs-hello-world" />
+    </parameters>
+  </settings>
+
+  <build-runners>
+    <!-- Install Dependencies -->
+    <runner name="Install Dependencies" type="simpleRunner">
+      <parameters>
+        <param name="script.content">
+          <![CDATA[
+          cd applications/nodejs-react
+          npm ci
+          ]]>
+        </param>
+        <param name="teamcity.step.mode" value="default" />
+        <param name="use.custom.script" value="true" />
+      </parameters>
+    </runner>
+
+    <!-- Run Tests -->
+    <runner name="Run Tests" type="simpleRunner">
+      <parameters>
+        <param name="script.content">
+          <![CDATA[
+          cd applications/nodejs-react
+          npm test -- --coverage --watchAll=false
+          ]]>
+        </param>
+        <param name="teamcity.step.mode" value="default" />
+        <param name="use.custom.script" value="true" />
+      </parameters>
+    </runner>
+
+    <!-- SonarQube Analysis -->
+    <runner name="SonarQube Analysis" type="sonar-qube">
+      <parameters>
+        <param name="sonar.projectKey" value="nodejs-hello-world" />
+        <param name="sonar.projectName" value="NodeJS Hello World" />
+        <param name="sonar.sources" value="applications/nodejs-react/src" />
+        <param name="sonar.tests" value="applications/nodejs-react/tests" />
+        <param name="sonar.javascript.lcov.reportPaths" value="applications/nodejs-react/coverage/lcov.info" />
+      </parameters>
+    </runner>
+
+    <!-- Security Scan - OWASP Dependency Check -->
+    <runner name="OWASP Dependency Check" type="simpleRunner">
+      <parameters>
+        <param name="script.content">
+          <![CDATA[
+          cd applications/nodejs-react
+          npm audit --audit-level moderate
+          npx retire --path . --outputformat json --outputpath retire-report.json
+          ]]>
+        </param>
+        <param name="teamcity.step.mode" value="default" />
+        <param name="use.custom.script" value="true" />
+      </parameters>
+    </runner>
+
+    <!-- Docker Build and Push -->
+    <runner name="Docker Build and Push" type="simpleRunner">
+      <parameters>
+        <param name="script.content">
+          <![CDATA[
+          cd applications/nodejs-react
+          
+          # Build Docker image
+          docker build -t nodejs-hello-world:latest .
+          docker tag nodejs-hello-world:latest $ECR_REGISTRY/nodejs-hello-world:$BUILD_NUMBER
+          docker tag nodejs-hello-world:latest $ECR_REGISTRY/nodejs-hello-world:latest
+          
+          # Login to ECR
+          aws ecr get-login-password --region us-west-2 | docker login --username AWS --password-stdin $ECR_REGISTRY
+          
+          # Push to ECR
+          docker push $ECR_REGISTRY/nodejs-hello-world:$BUILD_NUMBER
+          docker push $ECR_REGISTRY/nodejs-hello-world:latest
+          
+          # Security scan of image
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+            -v $HOME/Library/Caches:/root/.cache/ \
+            aquasec/trivy image $ECR_REGISTRY/nodejs-hello-world:$BUILD_NUMBER
+          ]]>
+        </param>
+        <param name="teamcity.step.mode" value="default" />
+        <param name="use.custom.script" value="true" />
+      </parameters>
+    </runner>
+
+    <!-- Trigger Octopus Deploy -->
+    <runner name="Trigger Octopus Deploy" type="simpleRunner">
+      <parameters>
+        <param name="script.content">
+          <![CDATA[
+          octo create-release \
+            --project="Hello World Applications" \
+            --version=$BUILD_NUMBER \
+            --server=$OCTOPUS_SERVER \
+            --apiKey=$OCTOPUS_API_KEY \
+            --deployto="Development"
+          ]]>
+        </param>
+        <param name="teamcity.step.mode" value="default" />
+        <param name="use.custom.script" value="true" />
+      </parameters>
+    </runner>
+  </build-runners>
+
+  <build-triggers>
+    <build-trigger type="vcsTrigger">
+      <parameters>
+        <param name="branchFilter" value="+:refs/heads/main" />
+        <param name="enableQueueOptimization" value="true" />
+        <param name="quietPeriodMode" value="DO_NOT_USE" />
+      </parameters>
+    </build-trigger>
+  </build-triggers>
+
+</build-type>
