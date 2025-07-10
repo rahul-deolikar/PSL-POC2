@@ -37,26 +37,26 @@ log_error() {
 # Function to check prerequisites
 check_prerequisites() {
     log_info "Checking prerequisites..."
-    
+
     local missing_tools=()
-    
+
     # Check for essential tools
     if ! command -v jq &> /dev/null; then
         missing_tools+=("jq")
     fi
-    
+
     if ! command -v curl &> /dev/null; then
         missing_tools+=("curl")
     fi
-    
+
     if ! command -v git &> /dev/null; then
         missing_tools+=("git")
     fi
-    
+
     if ! command -v docker &> /dev/null; then
         missing_tools+=("docker")
     fi
-    
+
     # Check if any tools are missing
     if [ ${#missing_tools[@]} -ne 0 ]; then
         log_error "Missing required tools: ${missing_tools[*]}"
@@ -64,26 +64,26 @@ check_prerequisites() {
         log_info "On Ubuntu/Debian: sudo apt update && sudo apt install -y ${missing_tools[*]}"
         exit 1
     fi
-    
+
     log_success "All prerequisites are satisfied!"
 }
 
 # Function to validate configuration
 validate_config() {
     log_info "Validating configuration..."
-    
+
     if [ -f "$CONFIG_FILE" ]; then
         # Parse configuration with jq
         if ! jq empty "$CONFIG_FILE" 2>/dev/null; then
             log_error "Invalid JSON in configuration file: $CONFIG_FILE"
             exit 1
         fi
-        
+
         # Extract configuration values
         APP_NAME=$(jq -r '.app_name // "default-app"' "$CONFIG_FILE")
         ENVIRONMENT=$(jq -r '.environment // "development"' "$CONFIG_FILE")
         VERSION=$(jq -r '.version // "latest"' "$CONFIG_FILE")
-        
+
         log_info "Configuration loaded: $APP_NAME v$VERSION ($ENVIRONMENT)"
     else
         log_warning "No configuration file found. Using defaults."
@@ -96,7 +96,7 @@ validate_config() {
 # Function to build application
 build_application() {
     log_info "Building application..."
-    
+
     if [ -f "$PROJECT_ROOT/Dockerfile" ]; then
         log_info "Building Docker image: $APP_NAME:$VERSION"
         docker build -t "$APP_NAME:$VERSION" "$PROJECT_ROOT"
@@ -109,7 +109,7 @@ build_application() {
 # Function to deploy application
 deploy_application() {
     log_info "Deploying application..."
-    
+
     case "$ENVIRONMENT" in
         "development")
             deploy_to_development
@@ -166,7 +166,7 @@ show_usage() {
 main() {
     local command="${1:-help}"
     shift || true
-    
+
     # Parse command line options
     while [[ $# -gt 0 ]]; do
         case $1 in
@@ -185,7 +185,7 @@ main() {
                 ;;
         esac
     done
-    
+
     case "$command" in
         "deploy")
             check_prerequisites
