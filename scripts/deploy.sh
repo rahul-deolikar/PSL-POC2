@@ -1,216 +1,154 @@
 #!/bin/bash
 
-# Deployment Script with Prerequisite Checking
-# Description: Deploys application with comprehensive prerequisite validation
+# Local deployment script for ECS-EC2 cluster
+# This script provides an alternative to GitHub Actions for local deployments
 
-set -e  # Exit on any error
-
-# Configuration
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
-CONFIG_FILE="$PROJECT_ROOT/deploy.config"
+set -e
 
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
-# Logging functions
+# Functions
 log_info() {
-    echo -e "${BLUE}[INFO]${NC} $1"
+    echo -e "${GREEN}[INFO]${NC} $1"
 }
 
-log_success() {
-    echo -e "${GREEN}[SUCCESS]${NC} $1"
-}
-
-log_warning() {
-    echo -e "${YELLOW}[WARNING]${NC} $1"
+log_warn() {
+    echo -e "${YELLOW}[WARN]${NC} $1"
 }
 
 log_error() {
     echo -e "${RED}[ERROR]${NC} $1"
 }
 
-# Function to check prerequisites
+# Check prerequisites
 check_prerequisites() {
     log_info "Checking prerequisites..."
-
-    local missing_tools=()
-
-    # Check for essential tools
-    if ! command -v jq &> /dev/null; then
-        missing_tools+=("jq")
-    fi
-
-    if ! command -v curl &> /dev/null; then
-        missing_tools+=("curl")
-    fi
-
-    if ! command -v git &> /dev/null; then
-        missing_tools+=("git")
-    fi
-
-    if ! command -v docker &> /dev/null; then
-        missing_tools+=("docker")
-    fi
-
-    # Check if any tools are missing
-    if [ ${#missing_tools[@]} -ne 0 ]; then
-        log_error "Missing required tools: ${missing_tools[*]}"
-        log_info "Please install the missing tools and try again."
-        log_info "On Ubuntu/Debian: sudo apt update && sudo apt install -y ${missing_tools[*]}"
+    
+    # Check if terraform is installed
+    if ! command -v terraform &> /dev/null; then
+        log_error "Terraform is not installed. Please install it first."
         exit 1
     fi
-
-    log_success "All prerequisites are satisfied!"
-}
-
-# Function to validate configuration
-validate_config() {
-    log_info "Validating configuration..."
-
-    if [ -f "$CONFIG_FILE" ]; then
-        # Parse configuration with jq
-        if ! jq empty "$CONFIG_FILE" 2>/dev/null; then
-            log_error "Invalid JSON in configuration file: $CONFIG_FILE"
-            exit 1
-        fi
-
-        # Extract configuration values
-        APP_NAME=$(jq -r '.app_name // "default-app"' "$CONFIG_FILE")
-        ENVIRONMENT=$(jq -r '.environment // "development"' "$CONFIG_FILE")
-        VERSION=$(jq -r '.version // "latest"' "$CONFIG_FILE")
-
-        log_info "Configuration loaded: $APP_NAME v$VERSION ($ENVIRONMENT)"
-    else
-        log_warning "No configuration file found. Using defaults."
-        APP_NAME="default-app"
-        ENVIRONMENT="development"
-        VERSION="latest"
+    
+    # Check terraform version
+    TERRAFORM_VERSION=$(terraform version -json | jq -r '.terraform_version')
+    log_info "Terraform version: $TERRAFORM_VERSION"
+    
+    # Check if AWS CLI is installed
+    if ! command -v aws &> /dev/null; then
+        log_error "AWS CLI is not installed. Please install it first."
+        exit 1
+    fi
+    
+    # Check AWS credentials
+    if ! aws sts get-caller-identity &> /dev/null; then
+        log_error "AWS credentials are not configured. Please run 'aws configure' first."
+        exit 1
+    fi
+    
+    # Display AWS account info
+    AWS_ACCOUNT=$(aws sts get-caller-identity --query 'Account' --output text)
+    AWS_USER=$(aws sts get-caller-identity --query 'Arn' --output text)
+    log_info "AWS Account: $AWS_ACCOUNT"
+    log_info "AWS User: $AWS_USER"
+    
+    # Check if terraform.tfvars exists
+    if [ ! -f "terraform.tfvars" ]; then
+        log_warn "terraform.tfvars not found. Using default values from variables.tf"
+        log_warn "Consider copying terraform.tfvars.example to terraform.tfvars and customizing values"
     fi
 }
 
-# Function to build application
-build_application() {
-    log_info "Building application..."
+# Terraform operations
+terraform_init() {
+    log_info "Initializing Terraform..."
+    terraform init
+}
 
-    if [ -f "$PROJECT_ROOT/Dockerfile" ]; then
-        log_info "Building Docker image: $APP_NAME:$VERSION"
-        docker build -t "$APP_NAME:$VERSION" "$PROJECT_ROOT"
-        log_success "Docker image built successfully!"
+terraform_plan() {
+    log_info "Running Terraform plan..."
+    terraform plan -out=tfplan
+}
+
+terraform_apply() {
+    log_info "Applying Terraform configuration..."
+    terraform apply tfplan
+    
+    # Clean up plan file
+    rm -f tfplan
+    
+    log_info "Deployment completed successfully!"
+    log_info "ECS Cluster outputs:"
+    terraform output
+}
+
+terraform_destroy() {
+    log_warn "This will destroy all resources created by this Terraform configuration."
+    read -p "Are you sure you want to proceed? (yes/no): " -r
+    
+    if [ "$REPLY" = "yes" ]; then
+        log_info "Destroying Terraform resources..."
+        terraform destroy -auto-approve
+        log_info "Resources destroyed successfully!"
     else
-        log_warning "No Dockerfile found. Skipping Docker build."
+        log_info "Destroy operation cancelled."
     fi
 }
 
-# Function to deploy application
-deploy_application() {
-    log_info "Deploying application..."
-
-    case "$ENVIRONMENT" in
-        "development")
-            deploy_to_development
-            ;;
-        "staging")
-            deploy_to_staging
-            ;;
-        "production")
-            deploy_to_production
-            ;;
-        *)
-            log_error "Unknown environment: $ENVIRONMENT"
-            exit 1
-            ;;
-    esac
-}
-
-# Environment-specific deployment functions
-deploy_to_development() {
-    log_info "Deploying to development environment..."
-    # Add development-specific deployment logic here
-    log_success "Deployed to development!"
-}
-
-deploy_to_staging() {
-    log_info "Deploying to staging environment..."
-    # Add staging-specific deployment logic here
-    log_success "Deployed to staging!"
-}
-
-deploy_to_production() {
-    log_info "Deploying to production environment..."
-    # Add production-specific deployment logic here
-    log_success "Deployed to production!"
-}
-
-# Function to show usage
-show_usage() {
-    echo "Usage: $0 <command> [options]"
-    echo ""
-    echo "Commands:"
-    echo "  deploy          Deploy the application"
-    echo "  build           Build the application only"
-    echo "  check           Check prerequisites only"
-    echo "  help            Show this help message"
-    echo ""
-    echo "Options:"
-    echo "  --env <env>     Override environment (development|staging|production)"
-    echo "  --version <v>   Override version"
-    echo ""
-}
-
-# Main function
+# Main script
 main() {
-    local command="${1:-help}"
-    shift || true
-
-    # Parse command line options
-    while [[ $# -gt 0 ]]; do
-        case $1 in
-            --env)
-                ENVIRONMENT="$2"
-                shift 2
-                ;;
-            --version)
-                VERSION="$2"
-                shift 2
-                ;;
-            *)
-                log_error "Unknown option: $1"
-                show_usage
-                exit 1
-                ;;
-        esac
-    done
-
-    case "$command" in
+    case "${1:-deploy}" in
         "deploy")
             check_prerequisites
-            validate_config
-            build_application
-            deploy_application
+            terraform_init
+            terraform_plan
+            
+            echo ""
+            log_warn "Review the plan above carefully."
+            read -p "Do you want to apply these changes? (yes/no): " -r
+            
+            if [ "$REPLY" = "yes" ]; then
+                terraform_apply
+            else
+                log_info "Deployment cancelled."
+                rm -f tfplan
+            fi
             ;;
-        "build")
+        "plan")
             check_prerequisites
-            validate_config
-            build_application
+            terraform_init
+            terraform_plan
+            log_info "Plan saved to tfplan. Run './scripts/deploy.sh apply-plan' to apply."
             ;;
-        "check")
-            check_prerequisites
+        "apply-plan")
+            if [ ! -f "tfplan" ]; then
+                log_error "No plan file found. Run './scripts/deploy.sh plan' first."
+                exit 1
+            fi
+            terraform_apply
             ;;
-        "help")
-            show_usage
+        "destroy")
+            terraform_destroy
+            ;;
+        "output")
+            terraform output
             ;;
         *)
-            log_error "Unknown command: $command"
-            show_usage
+            echo "Usage: $0 {deploy|plan|apply-plan|destroy|output}"
+            echo ""
+            echo "Commands:"
+            echo "  deploy     - Run plan and apply (default)"
+            echo "  plan       - Run terraform plan only"
+            echo "  apply-plan - Apply existing plan file"
+            echo "  destroy    - Destroy all resources"
+            echo "  output     - Show terraform outputs"
             exit 1
             ;;
     esac
 }
 
-# Run main function with all arguments
 main "$@"
