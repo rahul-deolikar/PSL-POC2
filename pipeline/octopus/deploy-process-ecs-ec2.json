@@ -1,0 +1,77 @@
+{
+  "Version": 1,
+  "Steps": [
+    {
+      "Id": "deploy-nodejs-api-ec2",
+      "Name": "Deploy Node.js API to ECS EC2",
+      "Condition": "Success",
+      "StartTrigger": "StartAfterPrevious",
+      "PackageRequirement": "LetOctopusDecide",
+      "Actions": [
+        {
+          "Id": "nodejs-api-deployment",
+          "Name": "Deploy Node.js API",
+          "ActionType": "Octopus.AwsRunCloudFormation",
+          "IsDisabled": false,
+          "CanBeUsedForProjectVersioning": false,
+          "IsRequired": true,
+          "Properties": {
+            "Octopus.Action.Aws.Region": "#{AWS.Region}",
+            "Octopus.Action.Aws.CloudFormationTemplateSource": "Inline",
+            "Octopus.Action.Aws.CloudFormationTemplate": "{\n  \"AWSTemplateFormatVersion\": \"2010-09-09\",\n  \"Resources\": {\n    \"TaskDefinition\": {\n      \"Type\": \"AWS::ECS::TaskDefinition\",\n      \"Properties\": {\n        \"Family\": \"poc3-nodejs-api-ec2\",\n        \"NetworkMode\": \"bridge\",\n        \"RequiresCompatibilities\": [\"EC2\"],\n        \"ExecutionRoleArn\": \"#{ECS.TaskExecutionRoleArn}\",\n        \"TaskRoleArn\": \"#{ECS.TaskRoleArn}\",\n        \"ContainerDefinitions\": [\n          {\n            \"Name\": \"nodejs-api\",\n            \"Image\": \"#{ECR.Registry}/poc3-nodejs-api:#{Octopus.Release.Number}\",\n            \"Memory\": 512,\n            \"PortMappings\": [\n              {\n                \"ContainerPort\": 3000,\n                \"HostPort\": 0,\n                \"Protocol\": \"tcp\"\n              }\n            ],\n            \"LogConfiguration\": {\n              \"LogDriver\": \"awslogs\",\n              \"Options\": {\n                \"awslogs-group\": \"/ecs/poc3-nodejs-api\",\n                \"awslogs-region\": \"#{AWS.Region}\",\n                \"awslogs-stream-prefix\": \"ecs\"\n              }\n            },\n            \"Environment\": [\n              {\n                \"Name\": \"NODE_ENV\",\n                \"Value\": \"production\"\n              },\n              {\n                \"Name\": \"PORT\",\n                \"Value\": \"3000\"\n              }\n            ]\n          }\n        ]\n      }\n    },\n    \"Service\": {\n      \"Type\": \"AWS::ECS::Service\",\n      \"Properties\": {\n        \"ServiceName\": \"poc3-nodejs-api-ec2\",\n        \"Cluster\": \"#{ECS.ClusterName}\",\n        \"TaskDefinition\": {\"Ref\": \"TaskDefinition\"},\n        \"DesiredCount\": 2,\n        \"LaunchType\": \"EC2\",\n        \"LoadBalancers\": [\n          {\n            \"ContainerName\": \"nodejs-api\",\n            \"ContainerPort\": 3000,\n            \"TargetGroupArn\": \"#{ECS.NodejsTargetGroupArn}\"\n          }\n        ],\n        \"HealthCheckGracePeriodSeconds\": 60\n      }\n    }\n  }\n}",
+            "Octopus.Action.Aws.CloudFormationStackName": "poc3-nodejs-api-ec2-#{Octopus.Environment.Name}",
+            "Octopus.Action.Aws.IamCapabilities": "[\"CAPABILITY_IAM\", \"CAPABILITY_NAMED_IAM\"]"
+          }
+        }
+      ]
+    },
+    {
+      "Id": "deploy-reactjs-frontend-ec2",
+      "Name": "Deploy React.js Frontend to ECS EC2",
+      "Condition": "Success",
+      "StartTrigger": "StartAfterPrevious",
+      "PackageRequirement": "LetOctopusDecide",
+      "Actions": [
+        {
+          "Id": "reactjs-frontend-deployment",
+          "Name": "Deploy React.js Frontend",
+          "ActionType": "Octopus.AwsRunCloudFormation",
+          "IsDisabled": false,
+          "CanBeUsedForProjectVersioning": false,
+          "IsRequired": true,
+          "Properties": {
+            "Octopus.Action.Aws.Region": "#{AWS.Region}",
+            "Octopus.Action.Aws.CloudFormationTemplateSource": "Inline",
+            "Octopus.Action.Aws.CloudFormationTemplate": "{\n  \"AWSTemplateFormatVersion\": \"2010-09-09\",\n  \"Resources\": {\n    \"TaskDefinition\": {\n      \"Type\": \"AWS::ECS::TaskDefinition\",\n      \"Properties\": {\n        \"Family\": \"poc3-reactjs-frontend-ec2\",\n        \"NetworkMode\": \"bridge\",\n        \"RequiresCompatibilities\": [\"EC2\"],\n        \"ExecutionRoleArn\": \"#{ECS.TaskExecutionRoleArn}\",\n        \"TaskRoleArn\": \"#{ECS.TaskRoleArn}\",\n        \"ContainerDefinitions\": [\n          {\n            \"Name\": \"reactjs-frontend\",\n            \"Image\": \"#{ECR.Registry}/poc3-reactjs-frontend:#{Octopus.Release.Number}\",\n            \"Memory\": 256,\n            \"PortMappings\": [\n              {\n                \"ContainerPort\": 80,\n                \"HostPort\": 0,\n                \"Protocol\": \"tcp\"\n              }\n            ],\n            \"LogConfiguration\": {\n              \"LogDriver\": \"awslogs\",\n              \"Options\": {\n                \"awslogs-group\": \"/ecs/poc3-reactjs-frontend\",\n                \"awslogs-region\": \"#{AWS.Region}\",\n                \"awslogs-stream-prefix\": \"ecs\"\n              }\n            }\n          }\n        ]\n      }\n    },\n    \"Service\": {\n      \"Type\": \"AWS::ECS::Service\",\n      \"Properties\": {\n        \"ServiceName\": \"poc3-reactjs-frontend-ec2\",\n        \"Cluster\": \"#{ECS.ClusterName}\",\n        \"TaskDefinition\": {\"Ref\": \"TaskDefinition\"},\n        \"DesiredCount\": 2,\n        \"LaunchType\": \"EC2\",\n        \"LoadBalancers\": [\n          {\n            \"ContainerName\": \"reactjs-frontend\",\n            \"ContainerPort\": 80,\n            \"TargetGroupArn\": \"#{ECS.ReactjsTargetGroupArn}\"\n          }\n        ],\n        \"HealthCheckGracePeriodSeconds\": 60\n      }\n    }\n  }\n}",
+            "Octopus.Action.Aws.CloudFormationStackName": "poc3-reactjs-frontend-ec2-#{Octopus.Environment.Name}",
+            "Octopus.Action.Aws.IamCapabilities": "[\"CAPABILITY_IAM\", \"CAPABILITY_NAMED_IAM\"]"
+          }
+        }
+      ]
+    },
+    {
+      "Id": "deploy-dotnet-api-ec2",
+      "Name": "Deploy .NET API to ECS EC2",
+      "Condition": "Success",
+      "StartTrigger": "StartAfterPrevious",
+      "PackageRequirement": "LetOctopusDecide",
+      "Actions": [
+        {
+          "Id": "dotnet-api-deployment",
+          "Name": "Deploy .NET API",
+          "ActionType": "Octopus.AwsRunCloudFormation",
+          "IsDisabled": false,
+          "CanBeUsedForProjectVersioning": false,
+          "IsRequired": true,
+          "Properties": {
+            "Octopus.Action.Aws.Region": "#{AWS.Region}",
+            "Octopus.Action.Aws.CloudFormationTemplateSource": "Inline",
+            "Octopus.Action.Aws.CloudFormationTemplate": "{\n  \"AWSTemplateFormatVersion\": \"2010-09-09\",\n  \"Resources\": {\n    \"TaskDefinition\": {\n      \"Type\": \"AWS::ECS::TaskDefinition\",\n      \"Properties\": {\n        \"Family\": \"poc3-dotnet-api-ec2\",\n        \"NetworkMode\": \"bridge\",\n        \"RequiresCompatibilities\": [\"EC2\"],\n        \"ExecutionRoleArn\": \"#{ECS.TaskExecutionRoleArn}\",\n        \"TaskRoleArn\": \"#{ECS.TaskRoleArn}\",\n        \"ContainerDefinitions\": [\n          {\n            \"Name\": \"dotnet-api\",\n            \"Image\": \"#{ECR.Registry}/poc3-dotnet-api:#{Octopus.Release.Number}\",\n            \"Memory\": 512,\n            \"PortMappings\": [\n              {\n                \"ContainerPort\": 5000,\n                \"HostPort\": 0,\n                \"Protocol\": \"tcp\"\n              }\n            ],\n            \"LogConfiguration\": {\n              \"LogDriver\": \"awslogs\",\n              \"Options\": {\n                \"awslogs-group\": \"/ecs/poc3-dotnet-api\",\n                \"awslogs-region\": \"#{AWS.Region}\",\n                \"awslogs-stream-prefix\": \"ecs\"\n              }\n            },\n            \"Environment\": [\n              {\n                \"Name\": \"ASPNETCORE_ENVIRONMENT\",\n                \"Value\": \"Production\"\n              }\n            ]\n          }\n        ]\n      }\n    },\n    \"Service\": {\n      \"Type\": \"AWS::ECS::Service\",\n      \"Properties\": {\n        \"ServiceName\": \"poc3-dotnet-api-ec2\",\n        \"Cluster\": \"#{ECS.ClusterName}\",\n        \"TaskDefinition\": {\"Ref\": \"TaskDefinition\"},\n        \"DesiredCount\": 2,\n        \"LaunchType\": \"EC2\",\n        \"LoadBalancers\": [\n          {\n            \"ContainerName\": \"dotnet-api\",\n            \"ContainerPort\": 5000,\n            \"TargetGroupArn\": \"#{ECS.DotnetTargetGroupArn}\"\n          }\n        ],\n        \"HealthCheckGracePeriodSeconds\": 60\n      }\n    }\n  }\n}",
+            "Octopus.Action.Aws.CloudFormationStackName": "poc3-dotnet-api-ec2-#{Octopus.Environment.Name}",
+            "Octopus.Action.Aws.IamCapabilities": "[\"CAPABILITY_IAM\", \"CAPABILITY_NAMED_IAM\"]"
+          }
+        }
+      ]
+    }
+  ]
+}

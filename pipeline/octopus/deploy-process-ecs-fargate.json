@@ -1,0 +1,77 @@
+{
+  "Version": 1,
+  "Steps": [
+    {
+      "Id": "deploy-nodejs-api-fargate",
+      "Name": "Deploy Node.js API to ECS Fargate",
+      "Condition": "Success",
+      "StartTrigger": "StartAfterPrevious",
+      "PackageRequirement": "LetOctopusDecide",
+      "Actions": [
+        {
+          "Id": "nodejs-api-fargate-deployment",
+          "Name": "Deploy Node.js API to Fargate",
+          "ActionType": "Octopus.AwsRunCloudFormation",
+          "IsDisabled": false,
+          "CanBeUsedForProjectVersioning": false,
+          "IsRequired": true,
+          "Properties": {
+            "Octopus.Action.Aws.Region": "#{AWS.Region}",
+            "Octopus.Action.Aws.CloudFormationTemplateSource": "Inline",
+            "Octopus.Action.Aws.CloudFormationTemplate": "{\n  \"AWSTemplateFormatVersion\": \"2010-09-09\",\n  \"Resources\": {\n    \"TaskDefinition\": {\n      \"Type\": \"AWS::ECS::TaskDefinition\",\n      \"Properties\": {\n        \"Family\": \"poc3-nodejs-api-fargate\",\n        \"NetworkMode\": \"awsvpc\",\n        \"RequiresCompatibilities\": [\"FARGATE\"],\n        \"Cpu\": \"256\",\n        \"Memory\": \"512\",\n        \"ExecutionRoleArn\": \"#{ECS.TaskExecutionRoleArn}\",\n        \"TaskRoleArn\": \"#{ECS.TaskRoleArn}\",\n        \"ContainerDefinitions\": [\n          {\n            \"Name\": \"nodejs-api\",\n            \"Image\": \"#{ECR.Registry}/poc3-nodejs-api:#{Octopus.Release.Number}\",\n            \"PortMappings\": [\n              {\n                \"ContainerPort\": 3000,\n                \"Protocol\": \"tcp\"\n              }\n            ],\n            \"LogConfiguration\": {\n              \"LogDriver\": \"awslogs\",\n              \"Options\": {\n                \"awslogs-group\": \"/ecs/poc3-nodejs-api-fargate\",\n                \"awslogs-region\": \"#{AWS.Region}\",\n                \"awslogs-stream-prefix\": \"ecs\",\n                \"awslogs-create-group\": \"true\"\n              }\n            },\n            \"Environment\": [\n              {\n                \"Name\": \"NODE_ENV\",\n                \"Value\": \"production\"\n              },\n              {\n                \"Name\": \"PORT\",\n                \"Value\": \"3000\"\n              }\n            ],\n            \"Essential\": true\n          }\n        ]\n      }\n    },\n    \"Service\": {\n      \"Type\": \"AWS::ECS::Service\",\n      \"Properties\": {\n        \"ServiceName\": \"poc3-nodejs-api-fargate\",\n        \"Cluster\": \"#{ECS.ClusterName}\",\n        \"TaskDefinition\": {\"Ref\": \"TaskDefinition\"},\n        \"DesiredCount\": 2,\n        \"LaunchType\": \"FARGATE\",\n        \"NetworkConfiguration\": {\n          \"AwsvpcConfiguration\": {\n            \"Subnets\": [\"#{ECS.PrivateSubnet1}\", \"#{ECS.PrivateSubnet2}\"],\n            \"SecurityGroups\": [\"#{ECS.SecurityGroupId}\"],\n            \"AssignPublicIp\": \"DISABLED\"\n          }\n        },\n        \"LoadBalancers\": [\n          {\n            \"ContainerName\": \"nodejs-api\",\n            \"ContainerPort\": 3000,\n            \"TargetGroupArn\": \"#{ECS.NodejsTargetGroupArn}\"\n          }\n        ],\n        \"HealthCheckGracePeriodSeconds\": 60\n      }\n    }\n  }\n}",
+            "Octopus.Action.Aws.CloudFormationStackName": "poc3-nodejs-api-fargate-#{Octopus.Environment.Name}",
+            "Octopus.Action.Aws.IamCapabilities": "[\"CAPABILITY_IAM\", \"CAPABILITY_NAMED_IAM\"]"
+          }
+        }
+      ]
+    },
+    {
+      "Id": "deploy-reactjs-frontend-fargate",
+      "Name": "Deploy React.js Frontend to ECS Fargate",
+      "Condition": "Success",
+      "StartTrigger": "StartAfterPrevious",
+      "PackageRequirement": "LetOctopusDecide",
+      "Actions": [
+        {
+          "Id": "reactjs-frontend-fargate-deployment",
+          "Name": "Deploy React.js Frontend to Fargate",
+          "ActionType": "Octopus.AwsRunCloudFormation",
+          "IsDisabled": false,
+          "CanBeUsedForProjectVersioning": false,
+          "IsRequired": true,
+          "Properties": {
+            "Octopus.Action.Aws.Region": "#{AWS.Region}",
+            "Octopus.Action.Aws.CloudFormationTemplateSource": "Inline",
+            "Octopus.Action.Aws.CloudFormationTemplate": "{\n  \"AWSTemplateFormatVersion\": \"2010-09-09\",\n  \"Resources\": {\n    \"TaskDefinition\": {\n      \"Type\": \"AWS::ECS::TaskDefinition\",\n      \"Properties\": {\n        \"Family\": \"poc3-reactjs-frontend-fargate\",\n        \"NetworkMode\": \"awsvpc\",\n        \"RequiresCompatibilities\": [\"FARGATE\"],\n        \"Cpu\": \"256\",\n        \"Memory\": \"512\",\n        \"ExecutionRoleArn\": \"#{ECS.TaskExecutionRoleArn}\",\n        \"TaskRoleArn\": \"#{ECS.TaskRoleArn}\",\n        \"ContainerDefinitions\": [\n          {\n            \"Name\": \"reactjs-frontend\",\n            \"Image\": \"#{ECR.Registry}/poc3-reactjs-frontend:#{Octopus.Release.Number}\",\n            \"PortMappings\": [\n              {\n                \"ContainerPort\": 80,\n                \"Protocol\": \"tcp\"\n              }\n            ],\n            \"LogConfiguration\": {\n              \"LogDriver\": \"awslogs\",\n              \"Options\": {\n                \"awslogs-group\": \"/ecs/poc3-reactjs-frontend-fargate\",\n                \"awslogs-region\": \"#{AWS.Region}\",\n                \"awslogs-stream-prefix\": \"ecs\",\n                \"awslogs-create-group\": \"true\"\n              }\n            },\n            \"Essential\": true\n          }\n        ]\n      }\n    },\n    \"Service\": {\n      \"Type\": \"AWS::ECS::Service\",\n      \"Properties\": {\n        \"ServiceName\": \"poc3-reactjs-frontend-fargate\",\n        \"Cluster\": \"#{ECS.ClusterName}\",\n        \"TaskDefinition\": {\"Ref\": \"TaskDefinition\"},\n        \"DesiredCount\": 2,\n        \"LaunchType\": \"FARGATE\",\n        \"NetworkConfiguration\": {\n          \"AwsvpcConfiguration\": {\n            \"Subnets\": [\"#{ECS.PrivateSubnet1}\", \"#{ECS.PrivateSubnet2}\"],\n            \"SecurityGroups\": [\"#{ECS.SecurityGroupId}\"],\n            \"AssignPublicIp\": \"DISABLED\"\n          }\n        },\n        \"LoadBalancers\": [\n          {\n            \"ContainerName\": \"reactjs-frontend\",\n            \"ContainerPort\": 80,\n            \"TargetGroupArn\": \"#{ECS.ReactjsTargetGroupArn}\"\n          }\n        ],\n        \"HealthCheckGracePeriodSeconds\": 60\n      }\n    }\n  }\n}",
+            "Octopus.Action.Aws.CloudFormationStackName": "poc3-reactjs-frontend-fargate-#{Octopus.Environment.Name}",
+            "Octopus.Action.Aws.IamCapabilities": "[\"CAPABILITY_IAM\", \"CAPABILITY_NAMED_IAM\"]"
+          }
+        }
+      ]
+    },
+    {
+      "Id": "deploy-python-api-fargate",
+      "Name": "Deploy Python API to ECS Fargate",
+      "Condition": "Success",
+      "StartTrigger": "StartAfterPrevious",
+      "PackageRequirement": "LetOctopusDecide",
+      "Actions": [
+        {
+          "Id": "python-api-fargate-deployment",
+          "Name": "Deploy Python API to Fargate",
+          "ActionType": "Octopus.AwsRunCloudFormation",
+          "IsDisabled": false,
+          "CanBeUsedForProjectVersioning": false,
+          "IsRequired": true,
+          "Properties": {
+            "Octopus.Action.Aws.Region": "#{AWS.Region}",
+            "Octopus.Action.Aws.CloudFormationTemplateSource": "Inline",
+            "Octopus.Action.Aws.CloudFormationTemplate": "{\n  \"AWSTemplateFormatVersion\": \"2010-09-09\",\n  \"Resources\": {\n    \"TaskDefinition\": {\n      \"Type\": \"AWS::ECS::TaskDefinition\",\n      \"Properties\": {\n        \"Family\": \"poc3-python-api-fargate\",\n        \"NetworkMode\": \"awsvpc\",\n        \"RequiresCompatibilities\": [\"FARGATE\"],\n        \"Cpu\": \"256\",\n        \"Memory\": \"512\",\n        \"ExecutionRoleArn\": \"#{ECS.TaskExecutionRoleArn}\",\n        \"TaskRoleArn\": \"#{ECS.TaskRoleArn}\",\n        \"ContainerDefinitions\": [\n          {\n            \"Name\": \"python-api\",\n            \"Image\": \"#{ECR.Registry}/poc3-python-api:#{Octopus.Release.Number}\",\n            \"PortMappings\": [\n              {\n                \"ContainerPort\": 5001,\n                \"Protocol\": \"tcp\"\n              }\n            ],\n            \"LogConfiguration\": {\n              \"LogDriver\": \"awslogs\",\n              \"Options\": {\n                \"awslogs-group\": \"/ecs/poc3-python-api-fargate\",\n                \"awslogs-region\": \"#{AWS.Region}\",\n                \"awslogs-stream-prefix\": \"ecs\",\n                \"awslogs-create-group\": \"true\"\n              }\n            },\n            \"Environment\": [\n              {\n                \"Name\": \"FLASK_ENV\",\n                \"Value\": \"production\"\n              },\n              {\n                \"Name\": \"PORT\",\n                \"Value\": \"5001\"\n              }\n            ],\n            \"Essential\": true\n          }\n        ]\n      }\n    },\n    \"Service\": {\n      \"Type\": \"AWS::ECS::Service\",\n      \"Properties\": {\n        \"ServiceName\": \"poc3-python-api-fargate\",\n        \"Cluster\": \"#{ECS.ClusterName}\",\n        \"TaskDefinition\": {\"Ref\": \"TaskDefinition\"},\n        \"DesiredCount\": 2,\n        \"LaunchType\": \"FARGATE\",\n        \"NetworkConfiguration\": {\n          \"AwsvpcConfiguration\": {\n            \"Subnets\": [\"#{ECS.PrivateSubnet1}\", \"#{ECS.PrivateSubnet2}\"],\n            \"SecurityGroups\": [\"#{ECS.SecurityGroupId}\"],\n            \"AssignPublicIp\": \"DISABLED\"\n          }\n        },\n        \"LoadBalancers\": [\n          {\n            \"ContainerName\": \"python-api\",\n            \"ContainerPort\": 5001,\n            \"TargetGroupArn\": \"#{ECS.PythonTargetGroupArn}\"\n          }\n        ],\n        \"HealthCheckGracePeriodSeconds\": 60\n      }\n    }\n  }\n}",
+            "Octopus.Action.Aws.CloudFormationStackName": "poc3-python-api-fargate-#{Octopus.Environment.Name}",
+            "Octopus.Action.Aws.IamCapabilities": "[\"CAPABILITY_IAM\", \"CAPABILITY_NAMED_IAM\"]"
+          }
+        }
+      ]
+    }
+  ]
+}
